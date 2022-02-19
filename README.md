@@ -6,7 +6,7 @@
     <a href="https://crates.io/crates/ask_bayes">
       <img src="https://img.shields.io/crates/l/ask_bayes?style=for-the-badge" alt="License"/>
     </a>
-    <a href="https://docs.rs/{{project-name}}">
+    <a href="https://docs.rs/ask_bayes">
       <img src="https://img.shields.io/badge/docs-latest-blue.svg?style=for-the-badge" alt="docs.rs docs" />
     </a>
   </p>
@@ -26,7 +26,7 @@ Ask Bayes is a simple command line tool for performing Bayesian inference.  You 
 
 # <p id="usage">Usage</p>
 Ask Bayes can be invoked like so:  
-`ask-bayes -n Hypothesis-name -p 0.75 -l 0.75 -o`  
+`ask-bayes -n Hypothesis-name -p 0.75 -l 0.75`  
 which will output:  
 ```bash 
 P(Hypothesis-name) = 0.75

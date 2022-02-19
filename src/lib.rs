@@ -122,7 +122,7 @@ pub struct Args {
         conflicts_with = "prior",
         conflicts_with = "likelihood",
         conflicts_with = "likelihood-not",
-        conflicts_with = "observed-evidence",
+        conflicts_with = "evidence",
         conflicts_with = "update-prior"
     )]
     pub get_prior: bool,
@@ -135,7 +135,7 @@ pub struct Args {
         conflicts_with = "prior",
         conflicts_with = "likelihood",
         conflicts_with = "likelihood-not",
-        conflicts_with = "observed-evidence",
+        conflicts_with = "evidence",
         conflicts_with = "update-prior",
         conflicts_with = "get-prior"
     )]
@@ -148,7 +148,7 @@ pub struct Args {
         conflicts_with = "prior",
         conflicts_with = "likelihood",
         conflicts_with = "likelihood-not",
-        conflicts_with = "observed-evidence",
+        conflicts_with = "evidence",
         conflicts_with = "update-prior",
         conflicts_with = "set-prior",
         conflicts_with = "get-prior"
