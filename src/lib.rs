@@ -1,9 +1,99 @@
-use anyhow::{anyhow, Result};
+//! This library contains the core functionality of the `ask-bayes` crate.
+#![warn(
+    clippy::all,
+    clippy::restriction,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::cargo,
+    rust_2018_idioms,
+    missing_debug_implementations,
+    missing_docs
+)]
+#![allow(clippy::module_inception)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::blanket_clippy_restriction_lints)]
+#![allow(clippy::shadow_same)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::cargo_common_metadata)]
+#![allow(clippy::separated_literal_suffix)]
+#![allow(clippy::float_arithmetic)]
+
+use anyhow::{anyhow, Error, Result};
 use clap::Parser;
 use dirs::home_dir;
 use sled::Db;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
+/// Whether or not evidence supporting the hypothesis was observed
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum Evidence {
+    /// Evidence supporting the hypothesis was observed
+    Observed,
+    /// Evidence supporting the hypothesis was not observed
+    NotObserved,
+}
+
+impl FromStr for Evidence {
+    type Err = Error;
+
+    #[inline]
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "o" | "observed" | "Observed" => Ok(Self::Observed),
+            "n" | "not-observed" | "NotObserved" => Ok(Self::NotObserved),
+            _ => Err(anyhow!("Invalid evidence: {}", s)),
+        }
+    }
+}
+
+impl Display for Evidence {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Observed => write!(f, "Observed"),
+            Self::NotObserved => write!(f, "NotObserved"),
+        }
+    }
+}
+
+/// Whether or not the hypothesis should be updated in the database
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum UpdateHypothesis {
+    /// The hypothesis should be updated
+    Update,
+    /// The hypothesis should not be updated
+    NoUpdate,
+}
+
+impl FromStr for UpdateHypothesis {
+    type Err = Error;
+
+    #[inline]
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "u" | "update" | "Update" => Ok(Self::Update),
+            "n" | "no-update" | "NoUpdate" => Ok(Self::NoUpdate),
+            _ => Err(anyhow!("Invalid update hypothesis: {}", s)),
+        }
+    }
+}
+
+impl Display for UpdateHypothesis {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Update => write!(f, "Update"),
+            Self::NoUpdate => write!(f, "NoUpdate"),
+        }
+    }
+}
+
+/// Arguments for the `ask-bayes` command
 #[derive(Parser, Debug)]
+#[non_exhaustive]
 #[clap(author, version, about, long_about = None)]
 pub struct Args {
     /// Name of the Hypothesis to update
@@ -18,12 +108,12 @@ pub struct Args {
     /// The likelihood of the evidence P(E|¬H)
     #[clap(long, default_value_t = 0.5)]
     pub likelihood_not: f64,
-    /// Indicates supporting evidence is observed
-    #[clap(short, long)]
-    pub observed_evidence: bool,
+    /// Indicates whether supporting evidence is observed
+    #[clap(short, long, default_value_t = Evidence::Observed)]
+    pub evidence: Evidence,
     /// Updates the prior probability of the hypothesis P(H) to the new posterior probability, saving it to the database
-    #[clap(short, long)]
-    pub update_prior: bool,
+    #[clap(short, long, default_value_t = UpdateHypothesis::NoUpdate)]
+    pub update_prior: UpdateHypothesis,
     /// Returns the saved value of the prior probability of the hypothesis P(H).
     /// Incompatible with other flags aside from `--name`
     #[clap(
@@ -66,45 +156,71 @@ pub struct Args {
     pub remove_prior: bool,
 }
 
-/// The posterior probability of the hypothesis P(H|E)
+/// The posterior probability of the hypothesis P(H|E) if the evidence is observed, or P(H|¬E) if the evidence is not observed
+#[must_use]
+#[inline]
 pub fn calculate_posterior_probability(
     prior: f64,
     likelihood: f64,
     likelihood_not: f64,
-    observed_evidence: bool,
+    observed_evidence: &Evidence,
 ) -> f64 {
-    if observed_evidence {
-        likelihood * prior / (likelihood * prior + likelihood_not * (1.0 - prior))
-    } else {
-        (1.0 - likelihood) * prior
-            / ((1.0 - likelihood) * prior + (1.0 - likelihood_not) * (1.0 - prior))
+    match *observed_evidence {
+        Evidence::Observed => {
+            likelihood * prior / likelihood.mul_add(prior, likelihood_not * (1.0_f64 - prior))
+        }
+        Evidence::NotObserved => {
+            (1.0_f64 - likelihood) * prior
+                / (1.0_f64 - likelihood)
+                    .mul_add(prior, (1.0_f64 - likelihood_not) * (1.0_f64 - prior))
+        }
     }
 }
 
+/// Gets the prior probability of the hypothesis P(H) from the database.
+/// # Errors
+/// - If the prior probability of the hypothesis is not in the database
+/// - If the database cannot be opened
+/// - If the prior value is not a valid float  
+#[inline]
 pub fn get_prior(name: &str) -> Result<f64> {
     let db = open_db()?;
     let prior = db.get(&name)?;
     match prior {
-        Some(prior) => {
-            let bytes = prior.as_ref();
+        Some(prior_serialized) => {
+            let bytes = prior_serialized.as_ref();
             Ok(f64::from_be_bytes(bytes.try_into()?))
         }
         None => return Err(anyhow!("Could not find hypothesis {name}")),
     }
 }
 
+/// Sets the prior probability of the hypothesis P(H) to the new value, saving it to the database.
+/// # Errors
+/// - If the database cannot be opened
+/// - If the prior cannot be inserted into the database
+#[inline]
 pub fn set_prior(name: &str, prior: f64) -> Result<()> {
     let db = open_db()?;
     db.insert(name, &prior.to_be_bytes())?;
     Ok(())
 }
 
+/// Removes the prior probability of the hypothesis P(H) from the database
+/// # Errors
+/// - If the database cannot be opened
+/// - If the prior cannot be removed from the database
+#[inline]
 pub fn remove_prior(name: &str) -> Result<()> {
     let db = open_db()?;
     db.remove(name)?;
     Ok(())
 }
 
+/// Opens the hypotheses database
+/// # Errors
+/// - If the database cannot be opened
+#[inline]
 fn open_db() -> Result<Db> {
     let hd = match home_dir() {
         Some(hd) => hd,

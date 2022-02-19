@@ -1,4 +1,7 @@
-use ask_bayes::{calculate_posterior_probability, get_prior, remove_prior, set_prior, Args};
+use ask_bayes::{
+    calculate_posterior_probability, get_prior, remove_prior, set_prior, Args, Evidence,
+    UpdateHypothesis,
+};
 use clap::Parser;
 
 fn main() {
@@ -28,19 +31,19 @@ fn main() {
         args.prior,
         args.likelihood,
         args.likelihood_not,
-        args.observed_evidence,
+        &args.evidence,
     );
 
     println!("P({}) = {}", args.name, args.prior);
     println!("P(E|{}) = {}", args.name, args.likelihood);
     println!("P(E|¬{}) = {}", args.name, args.likelihood_not);
-    if args.observed_evidence {
-        println!("P({}|E) = {}", args.name, posterior_probability);
-    } else {
-        println!("P({}|¬E) = {}", args.name, posterior_probability);
-    }
+    match args.evidence {
+        Evidence::Observed => println!("P({}|E) = {}", args.name, posterior_probability),
+        Evidence::NotObserved => println!("P({}|¬E) = {}", args.name, posterior_probability),
+        _ => println!("P({}|?) = {}", args.name, posterior_probability),
+    };
 
-    if args.update_prior {
+    if let UpdateHypothesis::Update = args.update_prior {
         match set_prior(&args.name, posterior_probability) {
             Ok(()) => println!(
                 "P({}) has been updated to {}",

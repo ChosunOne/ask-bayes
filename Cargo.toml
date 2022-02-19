@@ -2,6 +2,13 @@
 name = "ask-bayes"
 version = "0.1.0"
 edition = "2021"
+authors = ["ChosunOne <chosunone@protonmail.com>"]
+description = "CLI tool for Bayesian inference"
+repository = "https://github.com/ChosunOne/ask-bayes"
+license = "MIT/Apache-2.0"
+readme = "README.md"
+keywords = ["bayesian", "inference", "cli", "rationality", "bayes"]
+categories = ["inference", "cli"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

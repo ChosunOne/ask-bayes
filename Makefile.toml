@@ -1,0 +1,41 @@
+env_files = [
+    { path = ".development.env", profile = "development" }
+]
+
+[tasks.format]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt"]
+
+[tasks.check]
+command = "cargo"
+args = ["check"]
+
+[tasks.clippy]
+install_crate = "clippy"
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--", "-W", "clippy::pedantic", "-D", "warnings"]
+
+[tasks.build]
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.coverage]
+clear = true
+command = "cargo"
+args = ["tarpaulin", "--ignore-tests", "-v", "--out", "Xml"]
+
+[tasks.coverage-report]
+clear = true
+command = "cargo"
+args = ["tarpaulin", "--ignore-tests", "-v", "--out", "Html"]
+
+[tasks.all]
+dependencies = [
+    "format",
+    "clippy",
+    "codecov-flow"
+]
+
+[env]
+CARGO_MAKE_COVERAGE_PROVIDER = "tarpaulin"
