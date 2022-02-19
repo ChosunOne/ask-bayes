@@ -10,39 +10,58 @@ pub struct Args {
     #[clap(short, long)]
     pub name: String,
     /// The prior probability of the hypothesis P(H)
-    #[clap(short, long, default_value_t = 0.5, group = "compute")]
+    #[clap(short, long, default_value_t = 0.5)]
     pub prior: f64,
     /// The likelihood of the evidence P(E|H)
-    #[clap(short, long, default_value_t = 0.5, group = "compute")]
+    #[clap(short, long, default_value_t = 0.5)]
     pub likelihood: f64,
     /// The likelihood of the evidence P(E|¬H)
-    #[clap(long, default_value_t = 0.5, group = "compute")]
+    #[clap(long, default_value_t = 0.5)]
     pub likelihood_not: f64,
     /// Indicates supporting evidence is observed
-    #[clap(short, long, group = "compute")]
+    #[clap(short, long)]
     pub observed_evidence: bool,
     /// Updates the prior probability of the hypothesis P(H) to the new posterior probability, saving it to the database
-    #[clap(short, long, group = "compute")]
+    #[clap(short, long)]
     pub update_prior: bool,
-    /// Returns the saved value of the prior probability of the hypothesis P(H)
-    #[clap(short, long, group = "get_prior", conflicts_with = "compute")]
+    /// Returns the saved value of the prior probability of the hypothesis P(H).
+    /// Incompatible with other flags aside from `--name`
+    #[clap(
+        short,
+        long,
+        conflicts_with = "prior",
+        conflicts_with = "likelihood",
+        conflicts_with = "likelihood-not",
+        conflicts_with = "observed-evidence",
+        conflicts_with = "update-prior"
+    )]
     pub get_prior: bool,
-    /// Sets the prior probability of the hypothesis P(H) to the new value, saving it to the database
+    /// Sets the prior probability of the hypothesis P(H) to the new value, saving it to the database.
+    /// Incompatible with other flags aside from `--name` and `--prior`
     #[clap(
         short,
         long,
         group = "set_prior",
-        conflicts_with = "compute",
-        conflicts_with = "get_prior"
+        conflicts_with = "prior",
+        conflicts_with = "likelihood",
+        conflicts_with = "likelihood-not",
+        conflicts_with = "observed-evidence",
+        conflicts_with = "update-prior",
+        conflicts_with = "get-prior"
     )]
     pub set_prior: bool,
     /// Removes the prior probability of the hypothesis P(H) from the database
+    /// Incompatible with other flags aside from `--name`
     #[clap(
         short,
         long,
-        conflicts_with = "compute",
-        conflicts_with = "set_prior",
-        conflicts_with = "get_prior"
+        conflicts_with = "prior",
+        conflicts_with = "likelihood",
+        conflicts_with = "likelihood-not",
+        conflicts_with = "observed-evidence",
+        conflicts_with = "update-prior",
+        conflicts_with = "set-prior",
+        conflicts_with = "get-prior"
     )]
     pub remove_prior: bool,
 }

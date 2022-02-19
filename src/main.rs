@@ -34,7 +34,11 @@ fn main() {
     println!("P({}) = {}", args.name, args.prior);
     println!("P(E|{}) = {}", args.name, args.likelihood);
     println!("P(E|¬{}) = {}", args.name, args.likelihood_not);
-    println!("P({}|E) = {}", args.name, posterior_probability);
+    if args.observed_evidence {
+        println!("P({}|E) = {}", args.name, posterior_probability);
+    } else {
+        println!("P({}|¬E) = {}", args.name, posterior_probability);
+    }
 
     if args.update_prior {
         match set_prior(&args.name, posterior_probability) {
