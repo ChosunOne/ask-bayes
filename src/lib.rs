@@ -215,6 +215,8 @@ pub struct Args {
     #[clap(
         short,
         long,
+        default_value_if("name", None, Some("0.5")),
+        validator = parse_validate_probability,
         conflicts_with = "prior",
         conflicts_with = "likelihood",
         conflicts_with = "likelihood-null",
