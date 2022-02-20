@@ -100,13 +100,13 @@ pub struct Args {
     #[clap(short, long)]
     pub name: String,
     /// The prior probability of the hypothesis P(H)
-    #[clap(short, long, default_value_t = 0.5)]
+    #[clap(short, long, default_value_t = 0.5, validator = validate_probability)]
     pub prior: f64,
     /// The likelihood of the evidence P(E|H)
-    #[clap(short, long, default_value_t = 0.5)]
+    #[clap(short, long, default_value_t = 0.5, validator = validate_probability)]
     pub likelihood: f64,
     /// The likelihood of the evidence P(E|¬H)
-    #[clap(long, default_value_t = 0.5)]
+    #[clap(long, default_value_t = 0.5, validator = validate_probability)]
     pub likelihood_not: f64,
     /// Indicates whether supporting evidence is observed
     #[clap(short, long, default_value_t = Evidence::Observed)]
@@ -131,8 +131,7 @@ pub struct Args {
     #[clap(
         short,
         long,
-        group = "set_prior",
-        conflicts_with = "prior",
+        requires = "prior",
         conflicts_with = "likelihood",
         conflicts_with = "likelihood-not",
         conflicts_with = "evidence",
@@ -140,7 +139,7 @@ pub struct Args {
         conflicts_with = "get-prior"
     )]
     pub set_prior: bool,
-    /// Removes the prior probability of the hypothesis P(H) from the database
+    /// Removes the prior probability of the hypothesis P(H) from the database.
     /// Incompatible with other flags aside from `--name`
     #[clap(
         short,
@@ -228,4 +227,12 @@ fn open_db() -> Result<Db> {
     };
     let db_path = hd.join(".ask-bayes").join("hypotheses.db");
     Ok(sled::open(db_path)?)
+}
+
+fn validate_probability(value: &str) -> Result<()> {
+    let value = value.parse::<f64>()?;
+    if value < 0.0_f64 || value > 1.0_f64 {
+        return Err(anyhow!("Probability must be between 0 and 1"));
+    }
+    Ok(())
 }
