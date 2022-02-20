@@ -1,10 +1,11 @@
 [package]
 name = "ask-bayes"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["ChosunOne <chosunone@protonmail.com>"]
 description = "CLI tool for Bayesian inference"
 repository = "https://github.com/ChosunOne/ask-bayes"
+documentation = "https://docs.rs/ask-bayes"
 license = "MIT/Apache-2.0"
 readme = "README.md"
 keywords = ["bayesian", "inference", "cli", "rationality", "bayes"]
@@ -12,8 +13,18 @@ categories = ["science", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+opt-level = 3
+lto = true
+incremental = true
+
 [dependencies]
 clap = { version = "3.1.0", features = ["derive"] }
 anyhow = "1.0.54"
 sled = "0.34.7"
 dirs = "4.0.0"
+dialoguer = "0.10.0"
+log = "0.4.14"
+simplelog = {version = "0.11.2", features = ["paris"]}
+prettytable-rs = "0.8.0"
+serde_json = "1.0.79"

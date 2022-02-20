@@ -29,10 +29,15 @@ Ask Bayes can be invoked like so:
 `ask-bayes -n Hypothesis-name -p 0.75 -l 0.75`  
 which will output:  
 ```bash 
-P(Hypothesis-name) = 0.75
-P(E|Hypothesis-name) = 0.75
-P(E|¬Hypothesis-name) = 0.5
-P(Hypothesis-name|E) = 0.8181818181818182
++-----------------------+-----------------------+--------------------+
+| Name                  | Probability           | Value              |
++-----------------------+-----------------------+--------------------+
+| Prior                 | P(Hypothesis-name)    | 0.75               |
+| Likelihood            | P(E|Hypothesis-name)  | 0.75               |
+| Likelihood Null       | P(E|¬Hypothesis-name) | 0.5                |
+| Marginal Likelihood   | P(E)                  | 0.6875             |
+| Posterior Probability | P(Hypothesis-name|E)  | 0.8181818181818182 |
++-----------------------+-----------------------+--------------------+
 ```
 see `ask-bayes --help` for more information.
 

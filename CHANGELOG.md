@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Releases
+
+## 0.1.4
+* Add a new wizard via `--wizard` or `-w` that guides you through updating a given hypothesis.
+* Add new output formats via `--output` or `-o`.  Options are `--output json`, `--output table`, and `--output simple`.
+
 ## 0.1.3
 * Add additional validations to prevent P(E) from being 0.
 

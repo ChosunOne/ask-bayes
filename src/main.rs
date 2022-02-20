@@ -1,56 +1,71 @@
 use anyhow::Result;
 use ask_bayes::prelude::*;
 use clap::Parser;
+use log::{info, LevelFilter};
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
-    let args = Args::parse();
-    if args.get_prior {
-        match get_prior(&args.name) {
-            Ok(p) => println!("P({}) = {}", args.name, p),
-            Err(e) => println!("{}", e),
-        }
-        return Ok(());
-    }
-    if args.set_prior {
-        match set_prior(&args.name, args.prior) {
-            Ok(()) => println!("P({}) = {}", args.name, args.prior),
-            Err(e) => println!("{}", e),
-        }
-        return Ok(());
-    }
-    if args.remove_prior {
-        match remove_prior(&args.name) {
-            Ok(()) => println!("P({}) removed", args.name),
-            Err(e) => println!("{}", e),
-        }
-        return Ok(());
-    }
-    let posterior_probability = calculate_posterior_probability(
-        args.prior,
-        args.likelihood,
-        args.likelihood_not,
-        &args.evidence,
-        &args.name,
+    TermLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
     )?;
 
-    println!("P({}) = {}", args.name, args.prior);
-    println!("P(E|{}) = {}", args.name, args.likelihood);
-    println!("P(E|¬{}) = {}", args.name, args.likelihood_not);
-    match args.evidence {
-        Evidence::Observed => println!("P({}|E) = {}", args.name, posterior_probability),
-        Evidence::NotObserved => println!("P({}|¬E) = {}", args.name, posterior_probability),
-        _ => println!("P({}|?) = {}", args.name, posterior_probability),
-    };
+    let args = Args::parse();
+    if args.wizard {
+        wizard()?;
+        return Ok(());
+    }
 
-    if let UpdateHypothesis::Update = args.update_prior {
-        match set_prior(&args.name, posterior_probability) {
-            Ok(()) => println!(
-                "P({}) has been updated to {}",
-                args.name, posterior_probability
-            ),
-            Err(e) => println!("{}", e),
-        }
+    let name = args.name.ok_or(anyhow::anyhow!("name is required"))?;
+
+    if args.get_prior {
+        let p = get_prior(&name)?;
+        info!("P({name}) = {}", p);
+        return Ok(());
+    }
+
+    if args.remove_prior {
+        remove_prior(&name)?;
+        info!("P({name}) removed");
+        return Ok(());
+    }
+
+    if let Some(prior) = args.set_prior {
+        set_prior(&name, prior)?;
+        info!("P({name}) = {}", prior);
+        return Ok(());
+    }
+
+    let prior = args.prior.ok_or(anyhow::anyhow!("prior is required"))?;
+    let likelihood = args
+        .likelihood
+        .ok_or(anyhow::anyhow!("likelihood is required"))?;
+    let likelihood_not = args
+        .likelihood_null
+        .ok_or(anyhow::anyhow!("likelihood_not is required"))?;
+    let evidence = args
+        .evidence
+        .ok_or(anyhow::anyhow!("evidence is required"))?;
+    let posterior_probability =
+        calculate_posterior_probability(prior, likelihood, likelihood_not, &evidence, &name)?;
+    let output_format = args.output.ok_or(anyhow::anyhow!("output is required"))?;
+
+    report_posterior_probability(
+        prior,
+        likelihood,
+        likelihood_not,
+        &evidence,
+        posterior_probability,
+        &name,
+        &output_format,
+    );
+
+    if let Some(UpdateHypothesis::Update) = args.update_prior {
+        set_prior(&name, posterior_probability)?;
+        info!("P({name}) has been updated to {}", posterior_probability);
     }
     Ok(())
 }
