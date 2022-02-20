@@ -1,10 +1,8 @@
 use anyhow::Result;
-use ask_bayes::{
-    calculate_posterior_probability, get_prior, remove_prior, set_prior, validate_likelihoods,
-    Args, Evidence, UpdateHypothesis,
-};
+use ask_bayes::prelude::*;
 use clap::Parser;
 
+#[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
     let args = Args::parse();
     if args.get_prior {
@@ -28,18 +26,13 @@ fn main() -> Result<()> {
         }
         return Ok(());
     }
-    validate_likelihoods(
-        args.likelihood,
-        args.likelihood_not,
-        &args.evidence,
-        &args.name,
-    )?;
     let posterior_probability = calculate_posterior_probability(
         args.prior,
         args.likelihood,
         args.likelihood_not,
         &args.evidence,
-    );
+        &args.name,
+    )?;
 
     println!("P({}) = {}", args.name, args.prior);
     println!("P(E|{}) = {}", args.name, args.likelihood);

@@ -25,8 +25,16 @@ use sled::Db;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+/// The prelude for the `ask-bayes` crate.
+pub mod prelude {
+    pub use crate::{
+        calculate_posterior_probability, get_prior, remove_prior, set_prior, Args, Evidence,
+        UpdateHypothesis,
+    };
+}
+
 /// Whether or not evidence supporting the hypothesis was observed
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Evidence {
     /// Evidence supporting the hypothesis was observed
@@ -59,7 +67,7 @@ impl Display for Evidence {
 }
 
 /// Whether or not the hypothesis should be updated in the database
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum UpdateHypothesis {
     /// The hypothesis should be updated
@@ -156,23 +164,26 @@ pub struct Args {
 }
 
 /// The posterior probability of the hypothesis P(H|E) if the evidence is observed, or P(H|¬E) if the evidence is not observed
-#[must_use]
+/// # Errors
+/// - If the P(E) is 0
 #[inline]
 pub fn calculate_posterior_probability(
     prior: f64,
     likelihood: f64,
     likelihood_not: f64,
     evidence: &Evidence,
-) -> f64 {
+    name: &str,
+) -> Result<f64> {
+    validate_likelihoods_and_prior(prior, likelihood, likelihood_not, evidence, name)?;
+    let p_e = probability_of_observing_evidence(prior, likelihood, likelihood_not);
     match *evidence {
         Evidence::Observed => {
-            // P(H|E) = P(H) * P(E|H) / (P(H) * P(E|H) + P(¬H) * P(E|¬H))
-            likelihood * prior / likelihood.mul_add(prior, likelihood_not * negate(prior))
+            // P(H|E) = P(H) * P(E|H) / P(E)
+            Ok(likelihood * prior / p_e)
         }
         Evidence::NotObserved => {
-            // P(H|¬E) = P(H) * P(¬E|H) / (P(H) * P(¬E|H) + P(¬H) * P(¬E|¬H))
-            negate(likelihood) * prior
-                / negate(likelihood).mul_add(prior, negate(likelihood_not) * negate(prior))
+            // P(H|¬E) = P(H) * P(¬E|H) / P(¬E)
+            Ok(negate(likelihood) * prior / negate(p_e))
         }
     }
 }
@@ -183,6 +194,7 @@ pub fn calculate_posterior_probability(
 /// - If the database cannot be opened
 /// - If the prior value is not a valid float  
 #[inline]
+#[cfg(not(tarpaulin_include))]
 pub fn get_prior(name: &str) -> Result<f64> {
     let db = open_db()?;
     let prior = db.get(&name)?;
@@ -200,6 +212,7 @@ pub fn get_prior(name: &str) -> Result<f64> {
 /// - If the database cannot be opened
 /// - If the prior cannot be inserted into the database
 #[inline]
+#[cfg(not(tarpaulin_include))]
 pub fn set_prior(name: &str, prior: f64) -> Result<()> {
     let db = open_db()?;
     db.insert(name, &prior.to_be_bytes())?;
@@ -211,6 +224,7 @@ pub fn set_prior(name: &str, prior: f64) -> Result<()> {
 /// - If the database cannot be opened
 /// - If the prior cannot be removed from the database
 #[inline]
+#[cfg(not(tarpaulin_include))]
 pub fn remove_prior(name: &str) -> Result<()> {
     let db = open_db()?;
     db.remove(name)?;
@@ -221,6 +235,7 @@ pub fn remove_prior(name: &str) -> Result<()> {
 /// # Errors
 /// - If the database cannot be opened
 #[inline]
+#[cfg(not(tarpaulin_include))]
 fn open_db() -> Result<Db> {
     let hd = match home_dir() {
         Some(hd) => hd,
@@ -239,12 +254,14 @@ fn validate_probability(value: &str) -> Result<f64> {
     Ok(float)
 }
 
-/// Validates the likelihood probabilities.  The sum of the probabilities should be greater than 0.  
-/// # Errors
-/// - If the sum of the likelihoods is less than or equal to 0 when evidence is observed
-/// - If the sum of the negated likelihoods is less than or equal to 0 when evidence is not observed
-#[inline]
-pub fn validate_likelihoods(
+/// Negates a probability.  Ex. P(H) -> P(¬H)
+fn negate(value: f64) -> f64 {
+    1.0_f64 - value
+}
+
+/// Checks that P(E) is not 0
+fn validate_likelihoods_and_prior(
+    prior: f64,
     likelihood: f64,
     likelihood_not: f64,
     evidence: &Evidence,
@@ -252,17 +269,18 @@ pub fn validate_likelihoods(
 ) -> Result<()> {
     match *evidence {
         Evidence::Observed => {
-            if likelihood + likelihood_not <= 0.0_f64 {
-                return Err(anyhow!(
-                    "The sum P(E|{name}) + P(E|¬{name}) must be greater than 0 if evidence is observed."
-                ));
+            if probability_of_observing_evidence(prior, likelihood, likelihood_not) <= 0.0_f64 {
+                return Err(anyhow!("The total probability of observing evidence P(E) must be greater than 0 if evidence is observed.  \r\nP(E) = P({name})[{prior}] * P(E|{name})[{likelihood}] + P(\u{ac}{name})[{}] * P(E|\u{ac}{name})[{}] = 0", negate(prior), likelihood_not));
             }
         }
         Evidence::NotObserved => {
-            if negate(likelihood) + negate(likelihood_not) <= 0.0_f64 {
-                return Err(anyhow!(
-                    "The sum P(¬E|{name}) + P(¬E|¬{name}) must be greater than 0 if evidence is not observed."
-                ));
+            if negate(probability_of_observing_evidence(
+                prior,
+                likelihood,
+                likelihood_not,
+            )) <= 0.0_f64
+            {
+                return Err(anyhow!("The total probability of not observing evidence P(\u{ac}E) must be greater than 0 if evidence is not observed.  \r\nP(\u{ac}E) = P(\u{ac}E|{name})[{}] * P({name})[{prior}] + P(\u{ac}{name})[{}] * P(\u{ac}E|\u{ac}{name})[{}] = 0", negate(likelihood), negate(prior), negate(likelihood_not)));
             }
         }
     }
@@ -270,7 +288,263 @@ pub fn validate_likelihoods(
     Ok(())
 }
 
-/// Negates a probability.  Ex. P(H) -> P(¬H)
-fn negate(value: f64) -> f64 {
-    1.0_f64 - value
+///  P(H) * P(E|H) + P(¬H) * P(E|¬H)
+fn probability_of_observing_evidence(prior: f64, likelihood: f64, likelihood_not: f64) -> f64 {
+    likelihood.mul_add(prior, likelihood_not * negate(prior))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_validates_a_valid_probability() -> Result<()> {
+        let prob = "0.75";
+        let result = validate_probability(prob)?;
+        assert_eq!(result, 0.75_f64);
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_a_probability_greater_than_1() -> Result<()> {
+        let prob = "1.1";
+        let result = validate_probability(prob);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_a_probability_less_than_0() -> Result<()> {
+        let prob = "-0.1";
+        let result = validate_probability(prob);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_an_invalid_float() -> Result<()> {
+        let prob = "invalid";
+        let result = validate_probability(prob);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_validates_a_valid_pair_of_likelihoods() -> Result<()> {
+        let likelihood = 0.75;
+        let likelihood_not = 0.25;
+        let prior = 0.5;
+        let evidence = Evidence::Observed;
+        let name = "test";
+        validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn it_validates_a_valid_pair_of_negated_likelihoods() -> Result<()> {
+        let prior = 0.5;
+        let likelihood = 0.75;
+        let likelihood_not = 0.25;
+        let evidence = Evidence::NotObserved;
+        let name = "test";
+        validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_a_pair_of_likelihoods_with_evidence_observed_when_the_sum_is_less_than_or_equal_to_0(
+    ) -> Result<()> {
+        let prior = 0.5;
+        let likelihood = 0.0;
+        let likelihood_not = 0.0;
+        let evidence = Evidence::Observed;
+        let name = "test";
+        let result =
+            validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_a_pair_of_negated_likelihoods_with_evidence_not_observed_when_the_negated_sum_is_less_than_or_equal_to_0(
+    ) -> Result<()> {
+        let prior = 0.5;
+        let likelihood = 1.0;
+        let likelihood_not = 1.0;
+        let evidence = Evidence::NotObserved;
+        let name = "test";
+        let result =
+            validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_parses_a_valid_evidence_string() -> Result<()> {
+        {
+            let evidence = "observed";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::Observed);
+        }
+        {
+            let evidence = "o";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::Observed);
+        }
+        {
+            let evidence = "Observed";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::Observed);
+        }
+        {
+            let evidence = "not-observed";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::NotObserved);
+        }
+        {
+            let evidence = "n";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::NotObserved);
+        }
+        {
+            let evidence = "NotObserved";
+            let result = Evidence::from_str(evidence)?;
+            assert_eq!(result, Evidence::NotObserved);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_parse_an_invalid_evidence_string() -> Result<()> {
+        let evidence = "invalid";
+        let result = Evidence::from_str(evidence);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_displays_a_valid_evidence_string() -> Result<()> {
+        {
+            let evidence = Evidence::Observed;
+            let result = evidence.to_string();
+            assert_eq!(result, "Observed");
+        }
+        {
+            let evidence = Evidence::NotObserved;
+            let result = evidence.to_string();
+            assert_eq!(result, "NotObserved");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn it_parses_a_valid_update_string() -> Result<()> {
+        {
+            let update = "update";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::Update);
+        }
+        {
+            let update = "u";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::Update);
+        }
+        {
+            let update = "Update";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::Update);
+        }
+        {
+            let update = "no-update";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::NoUpdate);
+        }
+        {
+            let update = "n";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::NoUpdate);
+        }
+        {
+            let update = "NoUpdate";
+            let result = UpdateHypothesis::from_str(update)?;
+            assert_eq!(result, UpdateHypothesis::NoUpdate);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_parse_an_invalid_update_string() -> Result<()> {
+        let update = "invalid";
+        let result = UpdateHypothesis::from_str(update);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_displays_a_valid_update_string() -> Result<()> {
+        {
+            let update = UpdateHypothesis::Update;
+            let result = update.to_string();
+            assert_eq!(result, "Update");
+        }
+        {
+            let update = UpdateHypothesis::NoUpdate;
+            let result = update.to_string();
+            assert_eq!(result, "NoUpdate");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn it_calculates_the_posterior_probability_when_evidence_is_observed() -> Result<()> {
+        let prior = 0.75;
+        let likelihood = 0.75;
+        let likelihood_not = 0.5;
+        let evidence = Evidence::Observed;
+        let name = "test";
+        let result =
+            calculate_posterior_probability(prior, likelihood, likelihood_not, &evidence, name)?;
+        assert_eq!(result, 0.8181818181818182);
+        Ok(())
+    }
+
+    #[test]
+    fn it_calculates_the_posterior_probability_when_evidence_is_not_observed() -> Result<()> {
+        let prior = 0.75;
+        let likelihood = 0.75;
+        let likelihood_not = 0.5;
+        let evidence = Evidence::NotObserved;
+        let name = "test";
+        let result =
+            calculate_posterior_probability(prior, likelihood, likelihood_not, &evidence, name)?;
+        assert_eq!(result, 0.6);
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_likelihoods_and_hypothesis_when_the_negated_prior_is_zero() -> Result<()>
+    {
+        let name = "test";
+        let prior = 1.0;
+        let likelihood = 1.0;
+        let likelihood_not = 0.5;
+        let evidence = Evidence::NotObserved;
+        let result =
+            validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name);
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn it_fails_to_validate_likelihoods_and_hypothesis_when_the_prior_is_zero() -> Result<()> {
+        let name = "test";
+        let prior = 0.0;
+        let likelihood = 0.5;
+        let likelihood_not = 0.0;
+        let evidence = Evidence::Observed;
+        let result =
+            validate_likelihoods_and_prior(prior, likelihood, likelihood_not, &evidence, name);
+        assert!(result.is_err());
+        Ok(())
+    }
 }
