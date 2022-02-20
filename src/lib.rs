@@ -162,16 +162,17 @@ pub fn calculate_posterior_probability(
     prior: f64,
     likelihood: f64,
     likelihood_not: f64,
-    observed_evidence: &Evidence,
+    evidence: &Evidence,
 ) -> f64 {
-    match *observed_evidence {
+    match *evidence {
         Evidence::Observed => {
-            likelihood * prior / likelihood.mul_add(prior, likelihood_not * (1.0_f64 - prior))
+            // P(H|E) = P(H) * P(E|H) / (P(H) * P(E|H) + P(¬H) * P(E|¬H))
+            likelihood * prior / likelihood.mul_add(prior, likelihood_not * negate(prior))
         }
         Evidence::NotObserved => {
-            (1.0_f64 - likelihood) * prior
-                / (1.0_f64 - likelihood)
-                    .mul_add(prior, (1.0_f64 - likelihood_not) * (1.0_f64 - prior))
+            // P(H|¬E) = P(H) * P(¬E|H) / (P(H) * P(¬E|H) + P(¬H) * P(¬E|¬H))
+            negate(likelihood) * prior
+                / negate(likelihood).mul_add(prior, negate(likelihood_not) * negate(prior))
         }
     }
 }
@@ -230,10 +231,46 @@ fn open_db() -> Result<Db> {
 }
 
 /// Validates a probability.  Probabilities should be valid floats between 0 and 1.
-fn validate_probability(value: &str) -> Result<()> {
+fn validate_probability(value: &str) -> Result<f64> {
     let float = value.parse::<f64>()?;
     if !(0.0_f64..=1.0_f64).contains(&float) {
         return Err(anyhow!("Probability must be between 0 and 1"));
     }
+    Ok(float)
+}
+
+/// Validates the likelihood probabilities.  The sum of the probabilities should be greater than 0.  
+/// # Errors
+/// - If the sum of the likelihoods is less than or equal to 0 when evidence is observed
+/// - If the sum of the negated likelihoods is less than or equal to 0 when evidence is not observed
+#[inline]
+pub fn validate_likelihoods(
+    likelihood: f64,
+    likelihood_not: f64,
+    evidence: &Evidence,
+    name: &str,
+) -> Result<()> {
+    match *evidence {
+        Evidence::Observed => {
+            if likelihood + likelihood_not <= 0.0_f64 {
+                return Err(anyhow!(
+                    "The sum P(E|{name}) + P(E|¬{name}) must be greater than 0 if evidence is observed."
+                ));
+            }
+        }
+        Evidence::NotObserved => {
+            if negate(likelihood) + negate(likelihood_not) <= 0.0_f64 {
+                return Err(anyhow!(
+                    "The sum P(¬E|{name}) + P(¬E|¬{name}) must be greater than 0 if evidence is not observed."
+                ));
+            }
+        }
+    }
+
     Ok(())
+}
+
+/// Negates a probability.  Ex. P(H) -> P(¬H)
+fn negate(value: f64) -> f64 {
+    1.0_f64 - value
 }
