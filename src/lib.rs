@@ -229,9 +229,10 @@ fn open_db() -> Result<Db> {
     Ok(sled::open(db_path)?)
 }
 
+/// Validates a probability.  Probabilities should be valid floats between 0 and 1.
 fn validate_probability(value: &str) -> Result<()> {
-    let value = value.parse::<f64>()?;
-    if value < 0.0_f64 || value > 1.0_f64 {
+    let float = value.parse::<f64>()?;
+    if !(0.0_f64..=1.0_f64).contains(&float) {
         return Err(anyhow!("Probability must be between 0 and 1"));
     }
     Ok(())
