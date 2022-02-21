@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ask_bayes::prelude::*;
 use clap::Parser;
-use log::{info, LevelFilter};
+use log::{debug, info, LevelFilter};
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
 #[cfg(not(tarpaulin_include))]
@@ -14,6 +14,7 @@ fn main() -> Result<()> {
     )?;
 
     let args = Args::parse();
+    debug!("{:?}", args);
     if args.wizard {
         wizard()?;
         return Ok(());
