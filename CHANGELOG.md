@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Releases
 
+## 0.2.1
+* Fix incorrectly setting default value for `set-prior`
+
 ## 0.2.0
 * Add a new wizard via `--wizard` or `-w` that guides you through updating a given hypothesis.
 * Add new output formats via `--output` or `-o`.  Options are `--output json`, `--output table`, and `--output simple`.
